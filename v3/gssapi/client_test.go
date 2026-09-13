@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"testing"
 
-	"github.com/jcmturner/gokrb5/v8/gssapi"
+	"github.com/go-krb5/krb5/gssapi"
 )
 
 // wrapTokenHeader builds a valid 16-byte acceptor WrapToken header with the

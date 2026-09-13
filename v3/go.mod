@@ -6,21 +6,15 @@ require (
 	github.com/Azure/go-ntlmssp v0.1.1
 	github.com/alexbrainman/sspi v0.0.0-20250919150558-7d374ff0d59e
 	github.com/go-asn1-ber/asn1-ber v1.5.8
+	github.com/go-krb5/krb5 v0.1.1-0.20260910042439-3e50d4009c09
 	github.com/google/uuid v1.6.0
-	github.com/jcmturner/gokrb5/v8 v8.4.4
-	github.com/stretchr/testify v1.8.1
-	golang.org/x/crypto v0.54.0
+	github.com/stretchr/testify v1.12.1
+	golang.org/x/crypto v0.57.0
 )
 
 require (
-	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/hashicorp/go-uuid v1.0.3 // indirect
-	github.com/jcmturner/aescts/v2 v2.0.0 // indirect
-	github.com/jcmturner/dnsutils/v2 v2.0.0 // indirect
-	github.com/jcmturner/gofork v1.7.6 // indirect
-	github.com/jcmturner/goidentity/v6 v6.0.1 // indirect
-	github.com/jcmturner/rpc/v2 v2.0.3 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
-	golang.org/x/net v0.57.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
+	github.com/go-crypt/x v0.4.17 // indirect
+	github.com/go-krb5/x v0.3.3 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
+	golang.org/x/net v0.59.0 // indirect
 )

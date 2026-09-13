@@ -7,19 +7,19 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/jcmturner/gokrb5/v8/client"
-	"github.com/jcmturner/gokrb5/v8/config"
-	"github.com/jcmturner/gokrb5/v8/keytab"
-	"github.com/jcmturner/gokrb5/v8/types"
+	"github.com/go-krb5/krb5/client"
+	"github.com/go-krb5/krb5/config"
+	"github.com/go-krb5/krb5/keytab"
+	"github.com/go-krb5/krb5/types"
 
-	"github.com/jcmturner/gokrb5/v8/gssapi"
-	"github.com/jcmturner/gokrb5/v8/spnego"
+	"github.com/go-krb5/krb5/gssapi"
+	"github.com/go-krb5/krb5/spnego"
 
-	"github.com/jcmturner/gokrb5/v8/crypto"
-	"github.com/jcmturner/gokrb5/v8/iana/keyusage"
-	"github.com/jcmturner/gokrb5/v8/messages"
+	"github.com/go-krb5/krb5/crypto"
+	"github.com/go-krb5/krb5/iana/keyusage"
+	"github.com/go-krb5/krb5/messages"
 
-	"github.com/jcmturner/gokrb5/v8/credentials"
+	"github.com/go-krb5/krb5/credentials"
 )
 
 // Client implements ldap.GSSAPIClient interface.
@@ -199,7 +199,7 @@ func (client *Client) NegotiateSaslAuth(input []byte, authzid string) ([]byte, e
 	b := [4]byte{0, 0, 0, 0}
 	payload := append(b[:], []byte(authzid)...)
 
-	encType, err := crypto.GetEtype(key.KeyType)
+	encType, err := crypto.GetEType(key.KeyType)
 	if err != nil {
 		return nil, err
 	}
