@@ -28,6 +28,13 @@ type Client struct {
 
 	ekey   types.EncryptionKey
 	Subkey types.EncryptionKey
+
+	// seq is the sequence number of the authenticator this client sent in its AP-REQ. RFC 4121
+	// section 4.2.6.2 starts an initiator's per-message tokens from it, and an acceptor that
+	// checks sequence numbers refuses a token that starts anywhere else.
+	seq uint64
+	// sess protects the per-message tokens of the handshake once the context is established.
+	sess *gssapi.SecurityLayerSession
 }
 
 // NewClientWithKeytab creates a new client from a keytab credential.
@@ -97,6 +104,8 @@ func (client *Client) Close() error {
 func (client *Client) DeleteSecContext() error {
 	client.ekey = types.EncryptionKey{}
 	client.Subkey = types.EncryptionKey{}
+	client.seq = 0
+	client.sess = nil
 	return nil
 }
 
@@ -124,6 +133,10 @@ func (client *Client) InitSecContextWithOptions(target string, input []byte, APO
 		token, err := spnego.NewKRB5TokenAPREQ(client.Client, tkt, ekey, gssapiFlags, APOptions)
 		if err != nil {
 			return nil, false, err
+		}
+
+		if seq := token.APReq.Authenticator.SeqNumber; seq > 0 {
+			client.seq = uint64(seq)
 		}
 
 		output, err := token.Marshal()
@@ -157,6 +170,22 @@ func (client *Client) InitSecContextWithOptions(target string, input []byte, APO
 				return nil, false, err
 			}
 			client.Subkey = part.Subkey
+
+			// RFC 4121 section 4.2.2: an acceptor that sends a subkey makes it the key of the
+			// established context; without one the ticket's session key stays.
+			key := client.ekey
+			if len(client.Subkey.KeyValue) > 0 {
+				key = client.Subkey
+			}
+
+			// Integrity and not none: the handshake's own tokens are integrity protected wrap
+			// tokens even when the layer being negotiated is none, so a session created with none
+			// would pass them through unprotected and the server would refuse the bind.
+			client.sess, err = gssapi.NewSecurityLayerSession(key, gssapi.SecurityLayerIntegrity, true, 0,
+				gssapi.InitialSendSequenceNumber(client.seq))
+			if err != nil {
+				return nil, false, err
+			}
 		}
 
 		if token.IsKRBError() {
@@ -169,59 +198,41 @@ func (client *Client) InitSecContextWithOptions(target string, input []byte, APO
 
 // NegotiateSaslAuth performs the last step of the SASL handshake.
 // See RFC 4752 section 3.1.
+//
+// The server offers a bit-mask of security layers and its maximum buffer size, and the client
+// answers with the one layer it selects and a buffer size of its own. This client selects no
+// security layer: SASL protection of the messages is redundant over TLS, and Active Directory
+// refuses the combination outright (MS-ADTS section 5.1.1.1). A client that selects no layer
+// announces a zero buffer, as RFC 4752 requires.
+//
+// The selection travels as the bit of the mask that means "no security layer", which is 0x01 and
+// not a zero octet: a zero mask selects nothing at all, and a server that checks is entitled to
+// refuse it.
 func (client *Client) NegotiateSaslAuth(input []byte, authzid string) ([]byte, error) {
-	token := &gssapi.WrapToken{}
-	err := UnmarshalWrapToken(token, input, true)
+	if client.sess == nil {
+		return nil, errors.New("no established context to negotiate the security layer over")
+	}
+
+	challenge, err := client.sess.Unwrap(input)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("server sent a final token that does not verify: %w", err)
 	}
 
-	if (token.Flags & 0b1) == 0 {
-		return nil, fmt.Errorf("got a Wrapped token that's not from the server")
+	if len(challenge) != 4 {
+		return nil, fmt.Errorf("server sent a %d byte final token for SASL GSSAPI handshake, want 4", len(challenge))
 	}
 
-	key := client.ekey
-	if (token.Flags & 0b100) != 0 {
-		key = client.Subkey
+	if gssapi.SecurityLayer(challenge[0])&gssapi.SecurityLayerNone == 0 {
+		return nil, fmt.Errorf("server offers security layers %#02x and not %s, which is the only one this client selects",
+			challenge[0], gssapi.SecurityLayerNone)
 	}
 
-	_, err = token.Verify(key, keyusage.GSSAPI_ACCEPTOR_SEAL)
-	if err != nil {
-		return nil, err
-	}
+	payload := make([]byte, 4+len(authzid))
+	payload[0] = byte(gssapi.SecurityLayerNone)
+	// payload[1:4] stays zero: a client that selects no layer has no buffer to announce.
+	copy(payload[4:], authzid)
 
-	pl := token.Payload
-	if len(pl) != 4 {
-		return nil, fmt.Errorf("server send bad final token for SASL GSSAPI Handshake")
-	}
-
-	// We never want a security layer
-	b := [4]byte{0, 0, 0, 0}
-	payload := append(b[:], []byte(authzid)...)
-
-	encType, err := crypto.GetEType(key.KeyType)
-	if err != nil {
-		return nil, err
-	}
-
-	token = &gssapi.WrapToken{
-		Flags:     0b100,
-		EC:        uint16(encType.GetHMACBitLength() / 8),
-		RRC:       0,
-		SndSeqNum: 1,
-		Payload:   payload,
-	}
-
-	if err := token.SetCheckSum(key, keyusage.GSSAPI_INITIATOR_SEAL); err != nil {
-		return nil, err
-	}
-
-	output, err := token.Marshal()
-	if err != nil {
-		return nil, err
-	}
-
-	return output, nil
+	return client.sess.Wrap(payload)
 }
 
 func getGssWrapTokenId() *[2]byte {
